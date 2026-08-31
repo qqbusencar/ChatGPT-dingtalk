@@ -24,6 +24,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 
+export const dynamic = 'force-static';
+
 const navigation = [
   { label: '我的工作台', icon: Home, count: 8 },
   { label: '审批看板', icon: ClipboardCheck, count: 0 },
