@@ -32,53 +32,1298 @@ const hrBase=hr;hr=function(){return hrBase()+integrationPanel()}
 const pages={'我的工作台':home,'审批看板':approval,'文化看板':culture,'项目看板':project,'效能看板':efficiency,'HR 中心':hr,'营销中心':marketing,'供应链中心':supply,'系统设置':settings};let active='我的工作台';const nav=document.getElementById('nav'),app=document.getElementById('app'),pageName=document.getElementById('pageName'),toast=document.getElementById('toast');const dingFields=['userid','unionid','name','job_number','email','mobile','title','dept_id_list','active','hired_date'],redmineFields=['id','login','firstname + lastname','mail','status','memberships.projects','custom_fields.employee_no','created_on','last_login_on'],rules=['direct','concat','array_first','boolean_status','date_ms_to_iso','manual_review'];const esc=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));function renderNav(){nav.innerHTML=navItems.map(x=>'<button class="'+(x[1]===active?'active':'')+'" data-nav="'+x[1]+'"><span class="nicon">'+x[0]+'</span><span class="nlabel">'+x[1]+'</span>'+(x[2]?'<span class="badge">'+x[2]+'</span>':'')+'</button>').join('')}function opts(list,current){return list.map(x=>'<option '+(x===current?'selected':'')+'>'+esc(x)+'</option>').join('')}async function loadHr(){try{let [s,m]=await Promise.all([fetch('/api/integrations/status').then(r=>r.json()),fetch('/api/hr/field-mappings').then(r=>r.json())]);setState('dingState',s.dingtalk?'已安全配置':'未配置',s.dingtalk?'ok':'bad');setState('redmineState',s.redmine?'已安全配置':'未配置',s.redmine?'ok':'bad');let body=document.getElementById('mappingRows');if(body)body.innerHTML=m.mappings.map(x=>'<tr data-map="'+esc(x.erpField)+'"><td><b>'+esc(x.erpLabel)+'</b><small style="display:block;color:#7c879b">'+esc(x.erpField)+'</small></td><td><select class="map-select ding">'+opts(dingFields,x.dingtalkField)+'</select></td><td><select class="map-select redmine">'+opts(redmineFields,x.redmineField)+'</select></td><td><select class="map-select rule">'+opts(rules,x.transformRule)+'</select></td><td><input class="required" type="checkbox" '+(x.required?'checked':'')+'></td><td>'+tag(x.enabled?'启用':'停用',x.enabled?'green':'')+'</td></tr>').join('')}catch(e){say('映射配置读取失败，请稍后重试')}}function setState(id,text,state){let el=document.getElementById(id);if(el){el.textContent=text;el.className='connection-state '+state}}async function testConnection(system,button){let id=system==='dingtalk'?'dingState':'redmineState';button.disabled=true;button.innerHTML='<span class="spinner"></span> 测试中';setState(id,'正在连接','');try{let r=await fetch('/api/integrations/test?system='+system,{method:'POST'}),d=await r.json();if(!r.ok)throw new Error(d.message||'连接失败');setState(id,d.detail||'连接正常','ok');say((system==='dingtalk'?'钉钉':'Redmine')+'连接测试成功')}catch(e){setState(id,e.message,'bad');say(e.message)}finally{button.disabled=false;button.textContent='测试连接'}}async function saveMappings(){let mappings=[...document.querySelectorAll('#mappingRows tr[data-map]')].map(tr=>({erpField:tr.dataset.map,dingtalkField:tr.querySelector('.ding').value,redmineField:tr.querySelector('.redmine').value,transformRule:tr.querySelector('.rule').value,required:tr.querySelector('.required').checked,enabled:true}));try{let r=await fetch('/api/hr/field-mappings',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({mappings})}),d=await r.json();if(!r.ok)throw new Error(d.message||'保存失败');say('字段映射已保存，并写入审计记录')}catch(e){say(e.message)}}function render(n){active=n;renderNav();pageName.innerHTML=n+' <small>'+P[n].sub+'</small>';app.innerHTML=pages[n]();scrollTo({top:0,behavior:'smooth'});if(n==='HR 中心')loadHr()}function say(x){toast.textContent=x;toast.classList.add('show');clearTimeout(window.__t);window.__t=setTimeout(()=>toast.classList.remove('show'),2600)}document.addEventListener('click',async e=>{let n=e.target.closest('[data-nav]');if(n){render(n.dataset.nav);return}let t=e.target.closest('[data-tab]');if(t){t.parentElement.querySelectorAll('button').forEach(x=>x.classList.remove('active'));t.classList.add('active');say('已切换到“'+t.dataset.tab+'”视图');return}let a=e.target.closest('[data-act]');if(!a)return;let x=a.dataset.act;if(x==='test-connection'){await testConnection(a.dataset.system,a)}else if(x==='save-map'){await saveMappings()}else if(x==='refresh-map'){await loadHr();say('映射配置已刷新')}else if(x==='done'){a.textContent='已处理';a.disabled=true;say('事项已更新，相关责任人将收到通知')}else if(x==='remind'){a.textContent='已提醒';a.disabled=true;say('提醒已发送到责任人的工作台')}else if(x==='join'){a.textContent='已报名';a.disabled=true;say('报名成功，活动已加入日程')}else if(x==='read')say('已完成阅读确认');else if(x==='export')say('报表已生成，可在下载中心查看');else if(x==='import')say('已打开数据导入向导：校验 → 映射 → 预演 → 导入');else say('演示操作已响应；正式环境将进入对应业务流程')});document.getElementById('search').addEventListener('keydown',e=>{if(e.key==='Enter')say('正在全局检索“'+e.target.value+'”')});render(active);
 const recordTypes={'我的工作台':['待办事项','日程','提醒'],'审批看板':['审批单','流程配置'],'文化看板':['制度政策','文化活动','员工心声','讨论话题'],'项目看板':['项目','里程碑','需求','Bug','生产计划'],'效能看板':['考勤异常','效能指标','机器人 Run'],'HR 中心':['员工档案','人事流程','薪酬记录','固定资产','低值易耗品'],'营销中心':['客户','商机','合同','回款'],'供应链中心':['供应商','采购单','库存记录','物料','生产排程'],'系统设置':['组织节点','角色权限','系统配置','数据导入']};let currentRecords=[],editingRecordId=null;function recordPanel(n){return '<section class="card gap">'+head('正式业务数据','以下记录保存至系统数据库，所有修改均记录审计日志','<div class="actions"><button class="btn" data-act="record-refresh">刷新</button><button class="btn primary" data-act="new">＋ 新增记录</button></div>')+'<div id="recordList"><div class="empty-state"><span class="spinner"></span> 正在读取正式数据…</div></div></section>'}function openRecordModal(rec=null){editingRecordId=rec?.id||null;document.getElementById('recordModalTitle').textContent=rec?'编辑业务记录':'新增业务记录';document.getElementById('recordModule').value=active;document.getElementById('recordType').innerHTML=(recordTypes[active]||['业务记录']).map(x=>'<option '+(x===rec?.recordType?'selected':'')+'>'+esc(x)+'</option>').join('');document.getElementById('recordTitle').value=rec?.title||'';document.getElementById('recordOwner').value=rec?.owner||'';document.getElementById('recordDue').value=(rec?.dueAt||'').slice(0,10);document.getElementById('recordStatus').value=rec?.status||'待处理';document.getElementById('recordNotes').value=rec?.payload?.notes||'';document.getElementById('recordModal').classList.add('open')}function closeRecordModal(){document.getElementById('recordModal').classList.remove('open');editingRecordId=null}async function loadRecords(n=active){let box=document.getElementById('recordList');if(!box)return;try{let r=await fetch('/api/records?module='+encodeURIComponent(n));let d=await r.json();if(!r.ok)throw new Error(d.message||'读取失败');if(n!==active)return;currentRecords=d.records||[];let email=d.user?.email||'';if(email){let u=document.querySelector('.user b'),s=document.querySelector('.user small');if(u)u.textContent=d.user.name||email;if(s)s.textContent=email+' · 操作留痕'}if(!currentRecords.length){box.innerHTML='<div class="empty-state"><b>暂无正式业务记录</b>点击“新增记录”开始录入；后续将按您确认的模块字段逐步细化。</div>';return}box.innerHTML=table(['类型','标题','责任人','截止日期','状态','更新时间','操作'],currentRecords.map(x=>[esc(x.recordType),'<b>'+esc(x.title)+'</b>'+(x.payload?.employeeNo?'<small style="display:block;color:#7c879b">ERP 工号：'+esc(x.payload.employeeNo)+'</small>':''),esc(x.owner||'—'),esc(x.dueAt?.slice(0,10)||'—'),tag(esc(x.status),x.status==='已完成'?'green':x.status==='已暂停'?'red':x.status==='进行中'?'blue':'amber'),esc(x.updatedAt?.replace('T',' ').slice(0,16)||''),'<div class="record-actions"><button class="mini" data-act="record-edit" data-id="'+x.id+'">编辑</button>'+(x.status!=='已完成'?'<button class="mini" data-act="record-done" data-id="'+x.id+'">完成</button>':'')+'<button class="mini" data-act="record-delete" data-id="'+x.id+'">删除</button></div>']))}catch(e){box.innerHTML='<div class="empty-state"><b>数据读取失败</b>'+esc(e.message)+'</div>'}}async function persistRecord(){let rec=editingRecordId?currentRecords.find(x=>x.id===editingRecordId):null,body={module:active,recordType:document.getElementById('recordType').value,title:document.getElementById('recordTitle').value.trim(),owner:document.getElementById('recordOwner').value.trim(),dueAt:document.getElementById('recordDue').value||null,status:document.getElementById('recordStatus').value,payload:{notes:document.getElementById('recordNotes').value.trim()},version:rec?.version};let url=rec?'/api/records/'+rec.id:'/api/records',method=rec?'PATCH':'POST';let r=await fetch(url,{method,headers:{'content-type':'application/json'},body:JSON.stringify(body)}),d=await r.json();if(!r.ok)throw new Error(d.message||'保存失败');closeRecordModal();await loadRecords(active);say(rec?'记录已更新并写入审计日志':'记录已保存至正式数据库')}async function updateRecord(id,patch){let rec=currentRecords.find(x=>x.id===id);if(!rec)return;let r=await fetch('/api/records/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({...patch,version:rec.version})}),d=await r.json();if(!r.ok)throw new Error(d.message||'更新失败');await loadRecords(active)}async function deleteRecord(id){if(!confirm('确认删除这条记录？系统将执行可审计的软删除。'))return;let rec=currentRecords.find(x=>x.id===id);let r=await fetch('/api/records/'+id,{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({version:rec?.version})}),d=await r.json();if(!r.ok)throw new Error(d.message||'删除失败');await loadRecords(active);say('记录已删除，审计记录已保留')}function exportRecords(){let rows=[['模块','类型','标题','责任人','截止日期','状态','更新时间'],...currentRecords.map(x=>[x.module,x.recordType,x.title,x.owner,x.dueAt||'',x.status,x.updatedAt])],csv='\ufeff'+rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='DTEN-ERP-'+active+'-'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(a.href);say('正式数据已导出')}const baseRender=render;render=function(n){baseRender(n);app.insertAdjacentHTML('beforeend',recordPanel(n));loadRecords(n)};document.getElementById('recordForm').addEventListener('submit',async e=>{e.preventDefault();try{await persistRecord()}catch(err){say(err.message)}});document.addEventListener('click',async e=>{if(e.target.closest('[data-record-close]')){e.preventDefault();closeRecordModal();return}let a=e.target.closest('[data-act]');if(!a||!['new','export','record-refresh','record-edit','record-done','record-delete'].includes(a.dataset.act))return;e.preventDefault();e.stopImmediatePropagation();try{if(a.dataset.act==='new')openRecordModal();else if(a.dataset.act==='export')exportRecords();else if(a.dataset.act==='record-refresh')await loadRecords(active);else if(a.dataset.act==='record-edit')openRecordModal(currentRecords.find(x=>x.id===a.dataset.id));else if(a.dataset.act==='record-done'){await updateRecord(a.dataset.id,{status:'已完成'});say('记录已完成')}else if(a.dataset.act==='record-delete')await deleteRecord(a.dataset.id)}catch(err){say(err.message)}},true);render(active);
 function liveFrame(n){let p=P[n];return '<section class="hero"><div><span class="eye">'+p.eye+'</span><h1>'+p.title+'</h1><p>'+p.desc+'</p></div><div class="actions">'+tag('正式数据','green')+'<button class="btn" data-act="export">导出数据</button><button class="btn primary" data-act="new">＋ 新建记录</button></div></section><nav class="subnav">'+p.tabs.map((x,i)=>'<button class="'+(i?'':'active')+'" data-tab="'+x+'">'+x+'</button>').join('')+'</nav><div class="notice">本模块已启用正式数据存储。当前先使用通用业务记录，待您确认该模块的字段与流程后，将无缝升级为专用表单和看板。</div>'}render=function(n){active=n;renderNav();pageName.innerHTML=n+' <small>'+P[n].sub+'</small>';app.innerHTML=liveFrame(n)+(n==='HR 中心'?integrationPanel():'')+recordPanel(n);scrollTo({top:0,behavior:'smooth'});if(n==='HR 中心')loadHr();loadRecords(n)};render(active);
-document.addEventListener('click',e=>{let a=e.target.closest('[data-act]');if(!a||['test-connection','save-map','refresh-map','new','export','record-refresh','record-edit','record-done','record-delete'].includes(a.dataset.act))return;e.preventDefault();e.stopImmediatePropagation();say('请在本页“正式业务数据”区域录入和处理；该模块专用表单将在后续细化时启用')},true);
+document.addEventListener('click',e=>{if(active==='HR 中心')return;let a=e.target.closest('[data-act]');if(!a||['test-connection','save-map','refresh-map','new','export','record-refresh','record-edit','record-done','record-delete'].includes(a.dataset.act))return;e.preventDefault();e.stopImmediatePropagation();say('请在本页“正式业务数据”区域录入和处理；该模块专用表单将在后续细化时启用')},true);
 dingFields.unshift('— 无对应字段 —');redmineFields.unshift('— 无对应字段 —');rules.unshift('auto_sequence');
-</script></body></html>`;
+</script><script src="/hr-ui.js"></script></body></html>`;
 
-const DEFAULT_MAPPINGS=[
-  {erpField:'employee_no',erpLabel:'ERP 工号（自动生成）',dingtalkField:'— 无对应字段 —',redmineField:'— 无对应字段 —',transformRule:'auto_sequence',required:true,enabled:true},
-  {erpField:'email',erpLabel:'企业邮箱（手动录入）',dingtalkField:'— 无对应字段 —',redmineField:'mail',transformRule:'manual_review',required:true,enabled:true},
-  {erpField:'dingtalk_user_id',erpLabel:'钉钉 UserID（接口获取）',dingtalkField:'userid',redmineField:'— 无对应字段 —',transformRule:'direct',required:true,enabled:true},
-  {erpField:'full_name',erpLabel:'姓名（辅助核对）',dingtalkField:'name',redmineField:'firstname + lastname',transformRule:'concat',required:true,enabled:true},
-  {erpField:'mobile',erpLabel:'手机号码',dingtalkField:'mobile',redmineField:'— 无对应字段 —',transformRule:'manual_review',required:false,enabled:true},
-  {erpField:'department',erpLabel:'所属部门',dingtalkField:'dept_id_list',redmineField:'memberships.projects',transformRule:'array_first',required:true,enabled:true},
-  {erpField:'job_title',erpLabel:'岗位名称',dingtalkField:'title',redmineField:'— 无对应字段 —',transformRule:'manual_review',required:false,enabled:true},
-  {erpField:'employment_status',erpLabel:'在职状态',dingtalkField:'active',redmineField:'status',transformRule:'boolean_status',required:true,enabled:true},
-  {erpField:'hired_at',erpLabel:'入职日期',dingtalkField:'hired_date',redmineField:'created_on',transformRule:'date_ms_to_iso',required:false,enabled:true}
+const HR_UI_SCRIPT = '';
+
+const DEFAULT_MAPPINGS = [
+  {
+    erpField: 'employee_no',
+    erpLabel: 'ERP 工号（自动生成）',
+    dingtalkField: '— 无对应字段 —',
+    redmineField: '— 无对应字段 —',
+    transformRule: 'auto_sequence',
+    required: true,
+    enabled: true,
+  },
+  {
+    erpField: 'email',
+    erpLabel: '企业邮箱（手动录入）',
+    dingtalkField: '— 无对应字段 —',
+    redmineField: 'mail',
+    transformRule: 'manual_review',
+    required: true,
+    enabled: true,
+  },
+  {
+    erpField: 'dingtalk_user_id',
+    erpLabel: '钉钉 UserID（接口获取）',
+    dingtalkField: 'userid',
+    redmineField: '— 无对应字段 —',
+    transformRule: 'direct',
+    required: true,
+    enabled: true,
+  },
+  {
+    erpField: 'full_name',
+    erpLabel: '姓名（辅助核对）',
+    dingtalkField: 'name',
+    redmineField: 'firstname + lastname',
+    transformRule: 'concat',
+    required: true,
+    enabled: true,
+  },
+  {
+    erpField: 'mobile',
+    erpLabel: '手机号码',
+    dingtalkField: 'mobile',
+    redmineField: '— 无对应字段 —',
+    transformRule: 'manual_review',
+    required: false,
+    enabled: true,
+  },
+  {
+    erpField: 'department',
+    erpLabel: '所属部门',
+    dingtalkField: 'dept_id_list',
+    redmineField: 'memberships.projects',
+    transformRule: 'array_first',
+    required: true,
+    enabled: true,
+  },
+  {
+    erpField: 'job_title',
+    erpLabel: '岗位名称',
+    dingtalkField: 'title',
+    redmineField: '— 无对应字段 —',
+    transformRule: 'manual_review',
+    required: false,
+    enabled: true,
+  },
+  {
+    erpField: 'employment_status',
+    erpLabel: '在职状态',
+    dingtalkField: 'active',
+    redmineField: 'status',
+    transformRule: 'boolean_status',
+    required: true,
+    enabled: true,
+  },
+  {
+    erpField: 'hired_at',
+    erpLabel: '入职日期',
+    dingtalkField: 'hired_date',
+    redmineField: 'created_on',
+    transformRule: 'date_ms_to_iso',
+    required: false,
+    enabled: true,
+  },
 ];
-const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
-async function ensureMappingTable(db){
+const json = (data, status = 200) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+    },
+  });
+async function ensureMappingTable(db) {
   await db.batch([
-    db.prepare('CREATE TABLE IF NOT EXISTS hr_field_mappings (id INTEGER PRIMARY KEY AUTOINCREMENT, erp_field TEXT NOT NULL, erp_label TEXT NOT NULL, dingtalk_field TEXT NOT NULL, redmine_field TEXT NOT NULL, transform_rule TEXT NOT NULL DEFAULT \'direct\', required INTEGER NOT NULL DEFAULT 0, enabled INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)'),
-    db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_hr_field_mappings_erp_field ON hr_field_mappings(erp_field)')
+    db.prepare(
+      "CREATE TABLE IF NOT EXISTS hr_field_mappings (id INTEGER PRIMARY KEY AUTOINCREMENT, erp_field TEXT NOT NULL, erp_label TEXT NOT NULL, dingtalk_field TEXT NOT NULL, redmine_field TEXT NOT NULL, transform_rule TEXT NOT NULL DEFAULT 'direct', required INTEGER NOT NULL DEFAULT 0, enabled INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)",
+    ),
+    db.prepare(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_hr_field_mappings_erp_field ON hr_field_mappings(erp_field)',
+    ),
   ]);
-  const count=await db.prepare('SELECT COUNT(*) AS total FROM hr_field_mappings').first();
-  if(Number(count?.total||0)===0){const now=new Date().toISOString();await db.batch(DEFAULT_MAPPINGS.map(x=>db.prepare('INSERT INTO hr_field_mappings (erp_field,erp_label,dingtalk_field,redmine_field,transform_rule,required,enabled,updated_at) VALUES (?,?,?,?,?,?,?,?)').bind(x.erpField,x.erpLabel,x.dingtalkField,x.redmineField,x.transformRule,x.required?1:0,x.enabled?1:0,now)))}
+  const count = await db
+    .prepare('SELECT COUNT(*) AS total FROM hr_field_mappings')
+    .first();
+  if (Number(count?.total || 0) === 0) {
+    const now = new Date().toISOString();
+    await db.batch(
+      DEFAULT_MAPPINGS.map((x) =>
+        db
+          .prepare(
+            'INSERT INTO hr_field_mappings (erp_field,erp_label,dingtalk_field,redmine_field,transform_rule,required,enabled,updated_at) VALUES (?,?,?,?,?,?,?,?)',
+          )
+          .bind(
+            x.erpField,
+            x.erpLabel,
+            x.dingtalkField,
+            x.redmineField,
+            x.transformRule,
+            x.required ? 1 : 0,
+            x.enabled ? 1 : 0,
+            now,
+          ),
+      ),
+    );
+  }
 }
-async function getMappings(env){if(!env?.DB)return DEFAULT_MAPPINGS;await ensureMappingTable(env.DB);const r=await env.DB.prepare("SELECT erp_field AS erpField, erp_label AS erpLabel, dingtalk_field AS dingtalkField, redmine_field AS redmineField, transform_rule AS transformRule, required, enabled, updated_at AS updatedAt FROM hr_field_mappings ORDER BY CASE erp_field WHEN 'employee_no' THEN 1 WHEN 'email' THEN 2 WHEN 'dingtalk_user_id' THEN 3 WHEN 'full_name' THEN 4 ELSE 10 END, id").all();return (r.results||[]).map(x=>({...x,required:Boolean(x.required),enabled:Boolean(x.enabled)}))}
-async function saveMappings(request,env){if(!env?.DB)return json({message:'数据库连接不可用'},503);let body;try{body=await request.json()}catch{return json({message:'请求格式无效'},400)}const items=body?.mappings;if(!Array.isArray(items)||items.length<1||items.length>30)return json({message:'映射规则数量无效'},400);const labels=Object.fromEntries(DEFAULT_MAPPINGS.map(x=>[x.erpField,x.erpLabel]));const clean=[];for(const x of items){if(!labels[x.erpField]||![x.dingtalkField,x.redmineField,x.transformRule].every(v=>typeof v==='string'&&v.length>0&&v.length<100))return json({message:'映射字段无效'},400);clean.push({...x,erpLabel:labels[x.erpField],required:Boolean(x.required),enabled:x.enabled!==false})}await ensureMappingTable(env.DB);const now=new Date().toISOString();await env.DB.batch(clean.map(x=>env.DB.prepare('INSERT INTO hr_field_mappings (erp_field,erp_label,dingtalk_field,redmine_field,transform_rule,required,enabled,updated_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(erp_field) DO UPDATE SET erp_label=excluded.erp_label,dingtalk_field=excluded.dingtalk_field,redmine_field=excluded.redmine_field,transform_rule=excluded.transform_rule,required=excluded.required,enabled=excluded.enabled,updated_at=excluded.updated_at').bind(x.erpField,x.erpLabel,x.dingtalkField,x.redmineField,x.transformRule,x.required?1:0,x.enabled?1:0,now)));return json({ok:true,count:clean.length,updatedAt:now})}
-async function fetchTimed(url,options={}){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),9000);try{return await fetch(url,{...options,signal:controller.signal})}finally{clearTimeout(timer)}}
-async function testIntegration(system,env){try{if(system==='dingtalk'){if(!env?.DINGTALK_APP_KEY||!env?.DINGTALK_APP_SECRET)return json({message:'钉钉凭据未配置'},400);const r=await fetchTimed('https://api.dingtalk.com/v1.0/oauth2/accessToken',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({appKey:env.DINGTALK_APP_KEY,appSecret:env.DINGTALK_APP_SECRET})});const d=await r.json().catch(()=>({}));if(!r.ok||!d.accessToken)return json({message:'钉钉连接失败，请检查应用凭据或开放平台权限'},502);return json({ok:true,detail:'凭据有效 · 令牌有效期 '+Number(d.expireIn||7200)+' 秒'})}if(system==='redmine'){if(!env?.REDMINE_BASE_URL||!env?.REDMINE_API_KEY)return json({message:'Redmine 凭据未配置'},400);const base=new URL(env.REDMINE_BASE_URL);if(base.protocol!=='https:')return json({message:'Redmine 地址必须使用 HTTPS'},400);const r=await fetchTimed(new URL('/users/current.json',base),{headers:{'accept':'application/json','X-Redmine-API-Key':env.REDMINE_API_KEY}});const d=await r.json().catch(()=>({}));if(!r.ok||!d.user)return json({message:'Redmine 连接失败，请检查 API Key、REST API 开关或网络访问'},502);const name=[d.user.firstname,d.user.lastname].filter(Boolean).join(' ');return json({ok:true,detail:'只读连接正常'+(name?' · 认证用户 '+name:'')})}return json({message:'未知的系统类型'},400)}catch(e){return json({message:e?.name==='AbortError'?'连接超时，请检查网络或服务状态':'连接失败，请检查配置与接口权限'},502)}}
-const MODULES=['我的工作台','审批看板','文化看板','项目看板','效能看板','HR 中心','营销中心','供应链中心','系统设置'];
-const RECORD_STATUSES=['待处理','进行中','已完成','已暂停'];
-function requestUser(request){const id=request.headers.get('oai-authenticated-user-id');if(!id)return null;let name=request.headers.get('oai-authenticated-user-full-name')||'';if(name&&request.headers.get('oai-authenticated-user-full-name-encoding')==='percent-encoded-utf-8'){try{name=decodeURIComponent(name)}catch{name=''}}const email=request.headers.get('oai-authenticated-user-email')||'';return {id,email,name:name||email}}
-async function ensureCore(db){await db.batch([
-  db.prepare("CREATE TABLE IF NOT EXISTS erp_records (id TEXT PRIMARY KEY NOT NULL, module TEXT NOT NULL, record_type TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT '待处理', owner TEXT NOT NULL DEFAULT '', due_at TEXT, payload_json TEXT NOT NULL DEFAULT '{}', version INTEGER NOT NULL DEFAULT 1, created_by TEXT NOT NULL, updated_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT)"),
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_erp_records_module_status ON erp_records(module,status) WHERE deleted_at IS NULL'),
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_erp_records_updated_at ON erp_records(updated_at) WHERE deleted_at IS NULL'),
-  db.prepare("CREATE TABLE IF NOT EXISTS erp_audit_logs (id TEXT PRIMARY KEY NOT NULL, actor_id TEXT NOT NULL, actor_email TEXT NOT NULL DEFAULT '', action TEXT NOT NULL, module TEXT NOT NULL, record_id TEXT NOT NULL, detail_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL)"),
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_erp_audit_logs_record ON erp_audit_logs(record_id,created_at)'),
-  db.prepare('CREATE TABLE IF NOT EXISTS erp_sequences (name TEXT PRIMARY KEY NOT NULL, current_value INTEGER NOT NULL DEFAULT 0)')
-])}
-function recordFromRow(x){let payload={};try{payload=JSON.parse(x.payloadJson||'{}')}catch{}return {...x,payload}}
-function cleanText(value,max=200){return typeof value==='string'?value.trim().slice(0,max):''}
-function cleanRecordInput(body,current=null){const module=cleanText(body?.module||current?.module,30),recordType=cleanText(body?.recordType||current?.recordType,60),title=cleanText(body?.title||current?.title,200),status=cleanText(body?.status||current?.status,20),owner=cleanText(body?.owner??current?.owner,80),dueAt=body?.dueAt===null?null:cleanText(body?.dueAt??current?.dueAt,40)||null,payload=body?.payload&&typeof body.payload==='object'&&!Array.isArray(body.payload)?body.payload:(current?.payload||{});if(!MODULES.includes(module)||!recordType||!title||!RECORD_STATUSES.includes(status)||JSON.stringify(payload).length>10000)return null;if(dueAt&&!/^\d{4}-\d{2}-\d{2}/.test(dueAt))return null;return {module,recordType,title,status,owner,dueAt,payload}}
-async function writeAudit(db,user,action,module,recordId,detail={}){await db.prepare('INSERT INTO erp_audit_logs (id,actor_id,actor_email,action,module,record_id,detail_json,created_at) VALUES (?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(),user.id,user.email,action,module,recordId,JSON.stringify(detail),new Date().toISOString()).run()}
-async function listRecords(url,env,user){await ensureCore(env.DB);const module=url.searchParams.get('module')||'';if(!MODULES.includes(module))return json({message:'模块参数无效'},400);const r=await env.DB.prepare('SELECT id,module,record_type AS recordType,title,status,owner,due_at AS dueAt,payload_json AS payloadJson,version,created_by AS createdBy,updated_by AS updatedBy,created_at AS createdAt,updated_at AS updatedAt FROM erp_records WHERE module=? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 100').bind(module).all();return json({records:(r.results||[]).map(recordFromRow),user:{email:user.email,name:user.name}})}
-async function createRecord(request,env,user){let body;try{body=await request.json()}catch{return json({message:'请求格式无效'},400)}const input=cleanRecordInput(body);if(!input)return json({message:'请完整填写有效的记录信息'},400);if(input.module==='HR 中心'&&input.recordType==='员工档案'){const seq=await env.DB.prepare("INSERT INTO erp_sequences(name,current_value) VALUES('employee',1) ON CONFLICT(name) DO UPDATE SET current_value=current_value+1 RETURNING current_value").first();input.payload={...input.payload,employeeNo:'DT'+new Date().getUTCFullYear()+String(Number(seq?.current_value||1)).padStart(5,'0')}}const id=crypto.randomUUID(),now=new Date().toISOString();await env.DB.prepare('INSERT INTO erp_records (id,module,record_type,title,status,owner,due_at,payload_json,version,created_by,updated_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,1,?,?,?,?)').bind(id,input.module,input.recordType,input.title,input.status,input.owner,input.dueAt,JSON.stringify(input.payload),user.id,user.id,now,now).run();await writeAudit(env.DB,user,'create',input.module,id,{recordType:input.recordType,title:input.title});return json({ok:true,record:{id,...input,version:1,createdAt:now,updatedAt:now}},201)}
-async function getCurrentRecord(env,id){const r=await env.DB.prepare('SELECT id,module,record_type AS recordType,title,status,owner,due_at AS dueAt,payload_json AS payloadJson,version,created_at AS createdAt,updated_at AS updatedAt FROM erp_records WHERE id=? AND deleted_at IS NULL').bind(id).first();return r?recordFromRow(r):null}
-async function updateRecordApi(request,env,user,id){let body;try{body=await request.json()}catch{return json({message:'请求格式无效'},400)}const current=await getCurrentRecord(env,id);if(!current)return json({message:'记录不存在'},404);if(Number(body?.version)!==Number(current.version))return json({message:'记录已被其他用户更新，请刷新后重试'},409);const input=cleanRecordInput(body,current);if(!input)return json({message:'记录内容无效'},400);const now=new Date().toISOString();const r=await env.DB.prepare('UPDATE erp_records SET record_type=?,title=?,status=?,owner=?,due_at=?,payload_json=?,version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=? AND deleted_at IS NULL').bind(input.recordType,input.title,input.status,input.owner,input.dueAt,JSON.stringify(input.payload),user.id,now,id,current.version).run();if(!r.meta?.changes)return json({message:'记录已变化，请刷新后重试'},409);await writeAudit(env.DB,user,'update',input.module,id,{fromVersion:current.version,toVersion:current.version+1,status:input.status});return json({ok:true,version:current.version+1,updatedAt:now})}
-async function deleteRecordApi(request,env,user,id){let body={};try{body=await request.json()}catch{}const current=await getCurrentRecord(env,id);if(!current)return json({message:'记录不存在'},404);if(Number(body?.version)!==Number(current.version))return json({message:'记录已被其他用户更新，请刷新后重试'},409);const now=new Date().toISOString();const r=await env.DB.prepare('UPDATE erp_records SET deleted_at=?,version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=? AND deleted_at IS NULL').bind(now,user.id,now,id,current.version).run();if(!r.meta?.changes)return json({message:'记录已变化，请刷新后重试'},409);await writeAudit(env.DB,user,'delete',current.module,id,{title:current.title});return json({ok:true,deletedAt:now})}
-async function recordsRoute(request,url,env){const user=requestUser(request);if(!user)return json({message:'请先登录后使用正式业务数据'},401);if(!env?.DB)return json({message:'数据库连接不可用'},503);await ensureCore(env.DB);const match=url.pathname.match(/^\/api\/records\/([^/]+)$/);if(url.pathname==='/api/records'&&request.method==='GET')return listRecords(url,env,user);if(url.pathname==='/api/records'&&request.method==='POST')return createRecord(request,env,user);if(match&&request.method==='PATCH')return updateRecordApi(request,env,user,match[1]);if(match&&request.method==='DELETE')return deleteRecordApi(request,env,user,match[1]);return json({message:'不支持的操作'},405)}
-export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname.startsWith('/api/records'))return recordsRoute(request,url,env);if(url.pathname==='/api/integrations/status')return json({dingtalk:Boolean(env?.DINGTALK_APP_KEY&&env?.DINGTALK_APP_SECRET),redmine:Boolean(env?.REDMINE_BASE_URL&&env?.REDMINE_API_KEY),secretsExposed:false});if(url.pathname==='/api/integrations/test'&&request.method==='POST'){if(!requestUser(request))return json({message:'请先登录'},401);return testIntegration(url.searchParams.get('system'),env)}if(url.pathname==='/api/hr/field-mappings'&&request.method==='GET')return json({mappings:await getMappings(env)});if(url.pathname==='/api/hr/field-mappings'&&request.method==='PUT'){if(!requestUser(request))return json({message:'请先登录'},401);return saveMappings(request,env)}if(url.pathname==='/'||url.pathname==='/index.html')return new Response(html,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'public, max-age=120'}});if(url.pathname==='/favicon.ico')return new Response(null,{status:204});return new Response('Not found',{status:404})}};
+async function getMappings(env) {
+  if (!env?.DB) return DEFAULT_MAPPINGS;
+  await ensureMappingTable(env.DB);
+  const r = await env.DB.prepare(
+    "SELECT erp_field AS erpField, erp_label AS erpLabel, dingtalk_field AS dingtalkField, redmine_field AS redmineField, transform_rule AS transformRule, required, enabled, updated_at AS updatedAt FROM hr_field_mappings ORDER BY CASE erp_field WHEN 'employee_no' THEN 1 WHEN 'email' THEN 2 WHEN 'dingtalk_user_id' THEN 3 WHEN 'full_name' THEN 4 ELSE 10 END, id",
+  ).all();
+  return (r.results || []).map((x) => ({
+    ...x,
+    required: Boolean(x.required),
+    enabled: Boolean(x.enabled),
+  }));
+}
+async function saveMappings(request, env) {
+  if (!env?.DB) return json({ message: '数据库连接不可用' }, 503);
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ message: '请求格式无效' }, 400);
+  }
+  const items = body?.mappings;
+  if (!Array.isArray(items) || items.length < 1 || items.length > 30)
+    return json({ message: '映射规则数量无效' }, 400);
+  const labels = Object.fromEntries(
+    DEFAULT_MAPPINGS.map((x) => [x.erpField, x.erpLabel]),
+  );
+  const clean = [];
+  for (const x of items) {
+    if (
+      !labels[x.erpField] ||
+      ![x.dingtalkField, x.redmineField, x.transformRule].every(
+        (v) => typeof v === 'string' && v.length > 0 && v.length < 100,
+      )
+    )
+      return json({ message: '映射字段无效' }, 400);
+    clean.push({
+      ...x,
+      erpLabel: labels[x.erpField],
+      required: Boolean(x.required),
+      enabled: x.enabled !== false,
+    });
+  }
+  await ensureMappingTable(env.DB);
+  const now = new Date().toISOString();
+  await env.DB.batch(
+    clean.map((x) =>
+      env.DB.prepare(
+        'INSERT INTO hr_field_mappings (erp_field,erp_label,dingtalk_field,redmine_field,transform_rule,required,enabled,updated_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(erp_field) DO UPDATE SET erp_label=excluded.erp_label,dingtalk_field=excluded.dingtalk_field,redmine_field=excluded.redmine_field,transform_rule=excluded.transform_rule,required=excluded.required,enabled=excluded.enabled,updated_at=excluded.updated_at',
+      ).bind(
+        x.erpField,
+        x.erpLabel,
+        x.dingtalkField,
+        x.redmineField,
+        x.transformRule,
+        x.required ? 1 : 0,
+        x.enabled ? 1 : 0,
+        now,
+      ),
+    ),
+  );
+  return json({ ok: true, count: clean.length, updatedAt: now });
+}
+async function fetchTimed(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 9000);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function testIntegration(system, env) {
+  try {
+    if (system === 'dingtalk') {
+      if (!env?.DINGTALK_APP_KEY || !env?.DINGTALK_APP_SECRET)
+        return json({ message: '钉钉凭据未配置' }, 400);
+      const r = await fetchTimed(
+        'https://api.dingtalk.com/v1.0/oauth2/accessToken',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            appKey: env.DINGTALK_APP_KEY,
+            appSecret: env.DINGTALK_APP_SECRET,
+          }),
+        },
+      );
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.accessToken)
+        return json(
+          { message: '钉钉连接失败，请检查应用凭据或开放平台权限' },
+          502,
+        );
+      return json({
+        ok: true,
+        detail: '凭据有效 · 令牌有效期 ' + Number(d.expireIn || 7200) + ' 秒',
+      });
+    }
+    if (system === 'redmine') {
+      if (!env?.REDMINE_BASE_URL || !env?.REDMINE_API_KEY)
+        return json({ message: 'Redmine 凭据未配置' }, 400);
+      const base = new URL(env.REDMINE_BASE_URL);
+      if (base.protocol !== 'https:')
+        return json({ message: 'Redmine 地址必须使用 HTTPS' }, 400);
+      const r = await fetchTimed(new URL('/users/current.json', base), {
+        headers: {
+          accept: 'application/json',
+          'X-Redmine-API-Key': env.REDMINE_API_KEY,
+        },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.user)
+        return json(
+          {
+            message:
+              'Redmine 连接失败，请检查 API Key、REST API 开关或网络访问',
+          },
+          502,
+        );
+      const name = [d.user.firstname, d.user.lastname]
+        .filter(Boolean)
+        .join(' ');
+      return json({
+        ok: true,
+        detail: '只读连接正常' + (name ? ' · 认证用户 ' + name : ''),
+      });
+    }
+    return json({ message: '未知的系统类型' }, 400);
+  } catch (e) {
+    return json(
+      {
+        message:
+          e?.name === 'AbortError'
+            ? '连接超时，请检查网络或服务状态'
+            : '连接失败，请检查配置与接口权限',
+      },
+      502,
+    );
+  }
+}
+const MODULES = [
+  '我的工作台',
+  '审批看板',
+  '文化看板',
+  '项目看板',
+  '效能看板',
+  'HR 中心',
+  '营销中心',
+  '供应链中心',
+  '系统设置',
+];
+const RECORD_STATUSES = ['待处理', '进行中', '已完成', '已暂停'];
+function requestUser(request) {
+  const id = request.headers.get('oai-authenticated-user-id');
+  if (!id) return null;
+  let name = request.headers.get('oai-authenticated-user-full-name') || '';
+  if (
+    name &&
+    request.headers.get('oai-authenticated-user-full-name-encoding') ===
+      'percent-encoded-utf-8'
+  ) {
+    try {
+      name = decodeURIComponent(name);
+    } catch {
+      name = '';
+    }
+  }
+  const email = request.headers.get('oai-authenticated-user-email') || '';
+  return { id, email, name: name || email };
+}
+async function ensureCore(db) {
+  await db.batch([
+    db.prepare(
+      "CREATE TABLE IF NOT EXISTS erp_records (id TEXT PRIMARY KEY NOT NULL, module TEXT NOT NULL, record_type TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT '待处理', owner TEXT NOT NULL DEFAULT '', due_at TEXT, payload_json TEXT NOT NULL DEFAULT '{}', version INTEGER NOT NULL DEFAULT 1, created_by TEXT NOT NULL, updated_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT)",
+    ),
+    db.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_erp_records_module_status ON erp_records(module,status) WHERE deleted_at IS NULL',
+    ),
+    db.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_erp_records_updated_at ON erp_records(updated_at) WHERE deleted_at IS NULL',
+    ),
+    db.prepare(
+      "CREATE TABLE IF NOT EXISTS erp_audit_logs (id TEXT PRIMARY KEY NOT NULL, actor_id TEXT NOT NULL, actor_email TEXT NOT NULL DEFAULT '', action TEXT NOT NULL, module TEXT NOT NULL, record_id TEXT NOT NULL, detail_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL)",
+    ),
+    db.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_erp_audit_logs_record ON erp_audit_logs(record_id,created_at)',
+    ),
+    db.prepare(
+      'CREATE TABLE IF NOT EXISTS erp_sequences (name TEXT PRIMARY KEY NOT NULL, current_value INTEGER NOT NULL DEFAULT 0)',
+    ),
+  ]);
+}
+function recordFromRow(x) {
+  let payload = {};
+  try {
+    payload = JSON.parse(x.payloadJson || '{}');
+  } catch {}
+  return { ...x, payload };
+}
+function cleanText(value, max = 200) {
+  return typeof value === 'string' ? value.trim().slice(0, max) : '';
+}
+function cleanRecordInput(body, current = null) {
+  const module = cleanText(body?.module || current?.module, 30),
+    recordType = cleanText(body?.recordType || current?.recordType, 60),
+    title = cleanText(body?.title || current?.title, 200),
+    status = cleanText(body?.status || current?.status, 20),
+    owner = cleanText(body?.owner ?? current?.owner, 80),
+    dueAt =
+      body?.dueAt === null
+        ? null
+        : cleanText(body?.dueAt ?? current?.dueAt, 40) || null,
+    payload =
+      body?.payload &&
+      typeof body.payload === 'object' &&
+      !Array.isArray(body.payload)
+        ? body.payload
+        : current?.payload || {};
+  if (
+    !MODULES.includes(module) ||
+    !recordType ||
+    !title ||
+    !RECORD_STATUSES.includes(status) ||
+    JSON.stringify(payload).length > 10000
+  )
+    return null;
+  if (dueAt && !/^\d{4}-\d{2}-\d{2}/.test(dueAt)) return null;
+  return { module, recordType, title, status, owner, dueAt, payload };
+}
+async function writeAudit(db, user, action, module, recordId, detail = {}) {
+  await db
+    .prepare(
+      'INSERT INTO erp_audit_logs (id,actor_id,actor_email,action,module,record_id,detail_json,created_at) VALUES (?,?,?,?,?,?,?,?)',
+    )
+    .bind(
+      crypto.randomUUID(),
+      user.id,
+      user.email,
+      action,
+      module,
+      recordId,
+      JSON.stringify(detail),
+      new Date().toISOString(),
+    )
+    .run();
+}
+async function listRecords(url, env, user) {
+  await ensureCore(env.DB);
+  const module = url.searchParams.get('module') || '';
+  if (!MODULES.includes(module)) return json({ message: '模块参数无效' }, 400);
+  const r = await env.DB.prepare(
+    'SELECT id,module,record_type AS recordType,title,status,owner,due_at AS dueAt,payload_json AS payloadJson,version,created_by AS createdBy,updated_by AS updatedBy,created_at AS createdAt,updated_at AS updatedAt FROM erp_records WHERE module=? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 100',
+  )
+    .bind(module)
+    .all();
+  return json({
+    records: (r.results || []).map(recordFromRow),
+    user: { email: user.email, name: user.name },
+  });
+}
+async function createRecord(request, env, user) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ message: '请求格式无效' }, 400);
+  }
+  const input = cleanRecordInput(body);
+  if (!input) return json({ message: '请完整填写有效的记录信息' }, 400);
+  if (input.module === 'HR 中心' && input.recordType === '员工档案') {
+    const seq = await env.DB.prepare(
+      "INSERT INTO erp_sequences(name,current_value) VALUES('employee',1) ON CONFLICT(name) DO UPDATE SET current_value=current_value+1 RETURNING current_value",
+    ).first();
+    input.payload = {
+      ...input.payload,
+      employeeNo:
+        'DT' +
+        new Date().getUTCFullYear() +
+        String(Number(seq?.current_value || 1)).padStart(5, '0'),
+    };
+  }
+  const id = crypto.randomUUID(),
+    now = new Date().toISOString();
+  await env.DB.prepare(
+    'INSERT INTO erp_records (id,module,record_type,title,status,owner,due_at,payload_json,version,created_by,updated_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,1,?,?,?,?)',
+  )
+    .bind(
+      id,
+      input.module,
+      input.recordType,
+      input.title,
+      input.status,
+      input.owner,
+      input.dueAt,
+      JSON.stringify(input.payload),
+      user.id,
+      user.id,
+      now,
+      now,
+    )
+    .run();
+  await writeAudit(env.DB, user, 'create', input.module, id, {
+    recordType: input.recordType,
+    title: input.title,
+  });
+  return json(
+    {
+      ok: true,
+      record: { id, ...input, version: 1, createdAt: now, updatedAt: now },
+    },
+    201,
+  );
+}
+async function getCurrentRecord(env, id) {
+  const r = await env.DB.prepare(
+    'SELECT id,module,record_type AS recordType,title,status,owner,due_at AS dueAt,payload_json AS payloadJson,version,created_at AS createdAt,updated_at AS updatedAt FROM erp_records WHERE id=? AND deleted_at IS NULL',
+  )
+    .bind(id)
+    .first();
+  return r ? recordFromRow(r) : null;
+}
+async function updateRecordApi(request, env, user, id) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ message: '请求格式无效' }, 400);
+  }
+  const current = await getCurrentRecord(env, id);
+  if (!current) return json({ message: '记录不存在' }, 404);
+  if (Number(body?.version) !== Number(current.version))
+    return json({ message: '记录已被其他用户更新，请刷新后重试' }, 409);
+  const input = cleanRecordInput(body, current);
+  if (!input) return json({ message: '记录内容无效' }, 400);
+  const now = new Date().toISOString();
+  const r = await env.DB.prepare(
+    'UPDATE erp_records SET record_type=?,title=?,status=?,owner=?,due_at=?,payload_json=?,version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=? AND deleted_at IS NULL',
+  )
+    .bind(
+      input.recordType,
+      input.title,
+      input.status,
+      input.owner,
+      input.dueAt,
+      JSON.stringify(input.payload),
+      user.id,
+      now,
+      id,
+      current.version,
+    )
+    .run();
+  if (!r.meta?.changes)
+    return json({ message: '记录已变化，请刷新后重试' }, 409);
+  await writeAudit(env.DB, user, 'update', input.module, id, {
+    fromVersion: current.version,
+    toVersion: current.version + 1,
+    status: input.status,
+  });
+  return json({ ok: true, version: current.version + 1, updatedAt: now });
+}
+async function deleteRecordApi(request, env, user, id) {
+  let body = {};
+  try {
+    body = await request.json();
+  } catch {}
+  const current = await getCurrentRecord(env, id);
+  if (!current) return json({ message: '记录不存在' }, 404);
+  if (Number(body?.version) !== Number(current.version))
+    return json({ message: '记录已被其他用户更新，请刷新后重试' }, 409);
+  const now = new Date().toISOString();
+  const r = await env.DB.prepare(
+    'UPDATE erp_records SET deleted_at=?,version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=? AND deleted_at IS NULL',
+  )
+    .bind(now, user.id, now, id, current.version)
+    .run();
+  if (!r.meta?.changes)
+    return json({ message: '记录已变化，请刷新后重试' }, 409);
+  await writeAudit(env.DB, user, 'delete', current.module, id, {
+    title: current.title,
+  });
+  return json({ ok: true, deletedAt: now });
+}
+async function recordsRoute(request, url, env) {
+  const user = requestUser(request);
+  if (!user) return json({ message: '请先登录后使用正式业务数据' }, 401);
+  if (!env?.DB) return json({ message: '数据库连接不可用' }, 503);
+  await ensureCore(env.DB);
+  const match = url.pathname.match(/^\/api\/records\/([^/]+)$/);
+  if (url.pathname === '/api/records' && request.method === 'GET')
+    return listRecords(url, env, user);
+  if (url.pathname === '/api/records' && request.method === 'POST')
+    return createRecord(request, env, user);
+  if (match && request.method === 'PATCH')
+    return updateRecordApi(request, env, user, match[1]);
+  if (match && request.method === 'DELETE')
+    return deleteRecordApi(request, env, user, match[1]);
+  return json({ message: '不支持的操作' }, 405);
+}
+const HR_TYPES = ['employees', 'movements', 'compensation', 'departments'];
+const EMPLOYEE_PROFILE_FIELDS = [
+  'redmineName',
+  'gender',
+  'personalEmail',
+  'idCard',
+  'education',
+  'school',
+  'major',
+  'birthDate',
+  'ethnicity',
+  'nativePlace',
+  'householdType',
+  'maritalStatus',
+  'graduationDate',
+  'registeredAddress',
+  'currentAddress',
+  'emergencyContact',
+  'emergencyPhone',
+  'probationMonths',
+  'probationEnd',
+  'contractStart',
+  'contractEnd',
+  'contractEntity',
+];
+const MOVEMENT_DETAIL_FIELDS = [
+  'beforeDepartment',
+  'afterDepartment',
+  'beforeTitle',
+  'afterTitle',
+  'beforeManager',
+  'afterManager',
+  'beforeSalary',
+  'afterSalary',
+  'beforeContractTerm',
+  'afterContractTerm',
+  'beforeContractEntity',
+  'afterContractEntity',
+  'handoverOwner',
+  'notes',
+];
+const BENEFIT_FIELDS = [
+  'secondaryBankName',
+  'secondaryBankAccount',
+  'socialInsuranceBase',
+  'providentFundBase',
+  'allowance',
+  'bonusPlan',
+  'benefitNotes',
+];
+function safeObject(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  try {
+    const x = JSON.parse(value || '{}');
+    return x && typeof x === 'object' && !Array.isArray(x) ? x : {};
+  } catch {
+    return {};
+  }
+}
+function pickBody(body, fields) {
+  return Object.fromEntries(
+    fields
+      .map((k) => [
+        k,
+        cleanText(
+          body?.[k],
+          k.includes('Address') ||
+            k === 'notes' ||
+            k === 'bonusPlan' ||
+            k === 'benefitNotes'
+            ? 1000
+            : 200,
+        ),
+      ])
+      .filter((x) => x[1] !== ''),
+  );
+}
+function validDate(v, required = false) {
+  v = cleanText(v, 10);
+  return !v && !required ? null : /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : false;
+}
+async function ensureHrTables(db) {
+  await db.batch([
+    db.prepare(
+      "CREATE TABLE IF NOT EXISTS hr_employees (id TEXT PRIMARY KEY NOT NULL,employee_no TEXT NOT NULL,full_name TEXT NOT NULL,corporate_email TEXT NOT NULL,dingtalk_user_id TEXT,redmine_login TEXT,employee_type TEXT NOT NULL DEFAULT '全职',employment_status TEXT NOT NULL DEFAULT '在职',mobile TEXT,department_path TEXT NOT NULL DEFAULT '',job_title TEXT NOT NULL DEFAULT '',manager_name TEXT NOT NULL DEFAULT '',workplace TEXT NOT NULL DEFAULT '',hire_date TEXT,leave_date TEXT,profile_json TEXT NOT NULL DEFAULT '{}',version INTEGER NOT NULL DEFAULT 1,created_by TEXT NOT NULL,updated_by TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,deleted_at TEXT)",
+    ),
+    db.prepare(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_hr_employees_employee_no ON hr_employees(employee_no)',
+    ),
+    db.prepare(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_hr_employees_corporate_email ON hr_employees(corporate_email)',
+    ),
+    db.prepare(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_hr_employees_dingtalk_user_id ON hr_employees(dingtalk_user_id) WHERE dingtalk_user_id IS NOT NULL AND dingtalk_user_id != ''",
+    ),
+    db.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_hr_employees_status_department ON hr_employees(employment_status,department_path) WHERE deleted_at IS NULL',
+    ),
+    db.prepare(
+      "CREATE TABLE IF NOT EXISTS hr_movements (id TEXT PRIMARY KEY NOT NULL,employee_id TEXT,employee_name TEXT NOT NULL,movement_type TEXT NOT NULL,effective_date TEXT NOT NULL,status TEXT NOT NULL DEFAULT '待审批',handler TEXT NOT NULL DEFAULT '',reason TEXT NOT NULL DEFAULT '',before_json TEXT NOT NULL DEFAULT '{}',after_json TEXT NOT NULL DEFAULT '{}',version INTEGER NOT NULL DEFAULT 1,created_by TEXT NOT NULL,updated_by TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,deleted_at TEXT)",
+    ),
+    db.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_hr_movements_employee_date ON hr_movements(employee_id,effective_date) WHERE deleted_at IS NULL',
+    ),
+    db.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_hr_movements_status ON hr_movements(status,effective_date) WHERE deleted_at IS NULL',
+    ),
+    db.prepare(
+      "CREATE TABLE IF NOT EXISTS hr_compensation (id TEXT PRIMARY KEY NOT NULL,employee_id TEXT NOT NULL,employee_name TEXT NOT NULL,monthly_salary_cent INTEGER NOT NULL DEFAULT 0,effective_date TEXT NOT NULL,bank_name TEXT NOT NULL DEFAULT '',bank_account TEXT NOT NULL DEFAULT '',social_insurance_start TEXT,benefits_json TEXT NOT NULL DEFAULT '{}',status TEXT NOT NULL DEFAULT '生效中',version INTEGER NOT NULL DEFAULT 1,created_by TEXT NOT NULL,updated_by TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,deleted_at TEXT)",
+    ),
+    db.prepare(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_hr_compensation_employee ON hr_compensation(employee_id) WHERE deleted_at IS NULL',
+    ),
+    db.prepare(
+      "CREATE TABLE IF NOT EXISTS hr_departments (id TEXT PRIMARY KEY NOT NULL,department_code TEXT NOT NULL,department_name TEXT NOT NULL,level INTEGER NOT NULL DEFAULT 1,parent_id TEXT,manager_name TEXT NOT NULL DEFAULT '',workplace TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT '启用',version INTEGER NOT NULL DEFAULT 1,created_by TEXT NOT NULL,updated_by TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,deleted_at TEXT)",
+    ),
+    db.prepare(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_hr_departments_code ON hr_departments(department_code)',
+    ),
+    db.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_hr_departments_parent ON hr_departments(parent_id,level) WHERE deleted_at IS NULL',
+    ),
+  ]);
+}
+function employeeOut(x) {
+  const profile = safeObject(x.profileJson);
+  let age = null;
+  if (profile.birthDate) {
+    const born = new Date(profile.birthDate + 'T00:00:00Z');
+    const today = new Date();
+    age = today.getUTCFullYear() - born.getUTCFullYear();
+    if (
+      today.getUTCMonth() < born.getUTCMonth() ||
+      (today.getUTCMonth() === born.getUTCMonth() &&
+        today.getUTCDate() < born.getUTCDate())
+    )
+      age -= 1;
+  }
+  return { ...x, profile, ...profile, age, profileJson: undefined };
+}
+function movementOut(x) {
+  const before = safeObject(x.beforeJson),
+    after = safeObject(x.afterJson),
+    detail = {};
+  for (const k of MOVEMENT_DETAIL_FIELDS)
+    detail[k] = k.startsWith('before')
+      ? before[k.slice(6, 7).toLowerCase() + k.slice(7)]
+      : k.startsWith('after')
+        ? after[k.slice(5, 6).toLowerCase() + k.slice(6)]
+        : before[k] || after[k] || '';
+  const summary = (o) =>
+    [o.department, o.title, o.manager, o.contractTerm, o.contractEntity]
+      .filter(Boolean)
+      .join(' / ');
+  return {
+    ...x,
+    before,
+    after,
+    detail,
+    ...detail,
+    beforeSummary: summary(before),
+    afterSummary: summary(after),
+    beforeJson: undefined,
+    afterJson: undefined,
+  };
+}
+function compensationOut(x) {
+  const benefits = safeObject(x.benefitsJson);
+  return { ...x, benefits, ...benefits, benefitsJson: undefined };
+}
+async function listHr(type, env) {
+  let r;
+  if (type === 'employees')
+    r = await env.DB.prepare(
+      'SELECT id,employee_no AS employeeNo,full_name AS fullName,corporate_email AS corporateEmail,dingtalk_user_id AS dingtalkUserId,redmine_login AS redmineLogin,employee_type AS employeeType,employment_status AS employmentStatus,mobile,department_path AS departmentPath,job_title AS jobTitle,manager_name AS managerName,workplace,hire_date AS hireDate,leave_date AS leaveDate,profile_json AS profileJson,version,created_at AS createdAt,updated_at AS updatedAt FROM hr_employees WHERE deleted_at IS NULL ORDER BY employment_status,employee_no',
+    ).all();
+  else if (type === 'movements')
+    r = await env.DB.prepare(
+      'SELECT id,employee_id AS employeeId,employee_name AS employeeName,movement_type AS movementType,effective_date AS effectiveDate,status,handler,reason,before_json AS beforeJson,after_json AS afterJson,version,created_at AS createdAt,updated_at AS updatedAt FROM hr_movements WHERE deleted_at IS NULL ORDER BY effective_date DESC,updated_at DESC',
+    ).all();
+  else if (type === 'compensation')
+    r = await env.DB.prepare(
+      'SELECT c.id,c.employee_id AS employeeId,c.employee_name AS employeeName,e.employee_no AS employeeNo,c.monthly_salary_cent AS monthlySalaryCent,c.effective_date AS effectiveDate,c.bank_name AS bankName,c.bank_account AS bankAccount,c.social_insurance_start AS socialInsuranceStart,c.benefits_json AS benefitsJson,c.status,c.version,c.created_at AS createdAt,c.updated_at AS updatedAt FROM hr_compensation c LEFT JOIN hr_employees e ON e.id=c.employee_id WHERE c.deleted_at IS NULL ORDER BY c.employee_name',
+    ).all();
+  else
+    r = await env.DB.prepare(
+      "SELECT d.id,d.department_code AS departmentCode,d.department_name AS departmentName,d.level,d.parent_id AS parentId,p.department_name AS parentName,d.manager_name AS managerName,d.workplace,d.status,d.version,d.created_at AS createdAt,d.updated_at AS updatedAt,(SELECT COUNT(*) FROM hr_employees e WHERE e.deleted_at IS NULL AND e.employment_status!='离职' AND (e.department_path=d.department_name OR e.department_path LIKE d.department_name||' / %' OR e.department_path LIKE '% / '||d.department_name||' / %' OR e.department_path LIKE '% / '||d.department_name)) AS headcount FROM hr_departments d LEFT JOIN hr_departments p ON p.id=d.parent_id WHERE d.deleted_at IS NULL ORDER BY d.level,d.department_code",
+    ).all();
+  let rows = r.results || [];
+  if (type === 'employees') rows = rows.map(employeeOut);
+  if (type === 'movements') rows = rows.map(movementOut);
+  if (type === 'compensation') rows = rows.map(compensationOut);
+  return json({ records: rows });
+}
+async function resolveEmployee(db, name) {
+  return db
+    .prepare(
+      'SELECT id,employee_no AS employeeNo,full_name AS fullName FROM hr_employees WHERE full_name=? AND deleted_at IS NULL ORDER BY created_at LIMIT 1',
+    )
+    .bind(name)
+    .first();
+}
+function splitMovement(body) {
+  const before = {},
+    after = {},
+    other = {};
+  for (const k of MOVEMENT_DETAIL_FIELDS) {
+    const v = cleanText(body?.[k], k === 'notes' ? 1000 : 200);
+    if (!v) continue;
+    if (k.startsWith('before'))
+      before[k.slice(6, 7).toLowerCase() + k.slice(7)] = v;
+    else if (k.startsWith('after'))
+      after[k.slice(5, 6).toLowerCase() + k.slice(6)] = v;
+    else other[k] = v;
+  }
+  return { before: { ...before, ...other }, after: { ...after, ...other } };
+}
+async function applyEffectiveMovement(db, input) {
+  if (input.status !== '已生效' || !input.employeeId) return;
+  const after = input.after || {};
+  if (input.movementType === '离职') {
+    await db
+      .prepare(
+        "UPDATE hr_employees SET employment_status='离职',leave_date=?,version=version+1,updated_by=?,updated_at=? WHERE id=? AND deleted_at IS NULL",
+      )
+      .bind(input.effectiveDate, input.user.id, input.now, input.employeeId)
+      .run();
+  } else if (['调岗', '入职', '转正'].includes(input.movementType)) {
+    const status =
+      input.movementType === '转正'
+        ? '在职'
+        : input.movementType === '入职'
+          ? '在职'
+          : null;
+    await db
+      .prepare(
+        "UPDATE hr_employees SET department_path=COALESCE(NULLIF(?,''),department_path),job_title=COALESCE(NULLIF(?,''),job_title),manager_name=COALESCE(NULLIF(?,''),manager_name),employment_status=COALESCE(?,employment_status),version=version+1,updated_by=?,updated_at=? WHERE id=? AND deleted_at IS NULL",
+      )
+      .bind(
+        after.department || '',
+        after.title || '',
+        after.manager || '',
+        status,
+        input.user.id,
+        input.now,
+        input.employeeId,
+      )
+      .run();
+  } else if (input.movementType === '调薪' && Number(after.salary) >= 0) {
+    await db
+      .prepare(
+        "UPDATE hr_compensation SET monthly_salary_cent=?,effective_date=?,status='生效中',version=version+1,updated_by=?,updated_at=? WHERE employee_id=? AND deleted_at IS NULL",
+      )
+      .bind(
+        Math.round(Number(after.salary) * 100),
+        input.effectiveDate,
+        input.user.id,
+        input.now,
+        input.employeeId,
+      )
+      .run();
+  } else if (input.movementType === '合同变更') {
+    const employee = await db
+      .prepare(
+        'SELECT profile_json AS profileJson FROM hr_employees WHERE id=? AND deleted_at IS NULL',
+      )
+      .bind(input.employeeId)
+      .first();
+    const profile = safeObject(employee?.profileJson);
+    const dates =
+      String(after.contractTerm || '').match(/\d{4}[.-]\d{1,2}[.-]\d{1,2}/g) ||
+      [];
+    if (dates[0]) profile.contractStart = dates[0].replaceAll('.', '-');
+    if (dates[1]) profile.contractEnd = dates[1].replaceAll('.', '-');
+    if (after.contractEntity) profile.contractEntity = after.contractEntity;
+    await db
+      .prepare(
+        'UPDATE hr_employees SET profile_json=?,version=version+1,updated_by=?,updated_at=? WHERE id=? AND deleted_at IS NULL',
+      )
+      .bind(JSON.stringify(profile), input.user.id, input.now, input.employeeId)
+      .run();
+  }
+}
+async function createHr(type, request, env, user) {
+  let b;
+  try {
+    b = await request.json();
+  } catch {
+    return json({ message: '请求格式无效' }, 400);
+  }
+  const id = crypto.randomUUID(),
+    now = new Date().toISOString();
+  if (type === 'employees') {
+    const fullName = cleanText(b.fullName, 80),
+      email = cleanText(b.corporateEmail, 160).toLowerCase(),
+      hireDate = validDate(b.hireDate),
+      leaveDate = validDate(b.leaveDate);
+    if (
+      !fullName ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      hireDate === false ||
+      leaveDate === false
+    )
+      return json({ message: '请填写姓名、有效企业邮箱及正确日期' }, 400);
+    const seq = await env.DB.prepare(
+        "INSERT INTO erp_sequences(name,current_value) VALUES('employee',1) ON CONFLICT(name) DO UPDATE SET current_value=current_value+1 RETURNING current_value",
+      ).first(),
+      employeeNo =
+        'DT' +
+        new Date().getUTCFullYear() +
+        String(Number(seq?.current_value || 1)).padStart(5, '0');
+    await env.DB.prepare(
+      'INSERT INTO hr_employees (id,employee_no,full_name,corporate_email,dingtalk_user_id,redmine_login,employee_type,employment_status,mobile,department_path,job_title,manager_name,workplace,hire_date,leave_date,profile_json,version,created_by,updated_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)',
+    )
+      .bind(
+        id,
+        employeeNo,
+        fullName,
+        email,
+        cleanText(b.dingtalkUserId, 160) || null,
+        cleanText(b.redmineLogin, 120) || null,
+        cleanText(b.employeeType, 30) || '全职',
+        cleanText(b.employmentStatus, 30) || '在职',
+        cleanText(b.mobile, 40) || null,
+        cleanText(b.departmentPath, 200),
+        cleanText(b.jobTitle, 100),
+        cleanText(b.managerName, 80),
+        cleanText(b.workplace, 80),
+        hireDate,
+        leaveDate,
+        JSON.stringify(pickBody(b, EMPLOYEE_PROFILE_FIELDS)),
+        user.id,
+        user.id,
+        now,
+        now,
+      )
+      .run();
+    await writeAudit(env.DB, user, 'create', 'HR 中心', id, {
+      entity: type,
+      employeeNo,
+      fullName,
+    });
+    return json({ ok: true, id, employeeNo }, 201);
+  }
+  if (type === 'movements') {
+    const employeeName = cleanText(b.employeeName, 80),
+      movementType = cleanText(b.movementType, 30),
+      effectiveDate = validDate(b.effectiveDate, true),
+      status = cleanText(b.status, 30) || '待审批';
+    if (
+      !employeeName ||
+      !['入职', '转正', '调岗', '调薪', '合同变更', '离职'].includes(
+        movementType,
+      ) ||
+      effectiveDate === false
+    )
+      return json({ message: '请完整填写员工、异动类型和生效日期' }, 400);
+    const employee = await resolveEmployee(env.DB, employeeName),
+      parts = splitMovement(b);
+    await env.DB.prepare(
+      'INSERT INTO hr_movements (id,employee_id,employee_name,movement_type,effective_date,status,handler,reason,before_json,after_json,version,created_by,updated_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)',
+    )
+      .bind(
+        id,
+        employee?.id || null,
+        employeeName,
+        movementType,
+        effectiveDate,
+        status,
+        cleanText(b.handler, 80),
+        cleanText(b.reason, 1000),
+        JSON.stringify(parts.before),
+        JSON.stringify(parts.after),
+        user.id,
+        user.id,
+        now,
+        now,
+      )
+      .run();
+    await applyEffectiveMovement(env.DB, {
+      employeeId: employee?.id,
+      movementType,
+      effectiveDate,
+      status,
+      after: parts.after,
+      user,
+      now,
+    });
+    await writeAudit(env.DB, user, 'create', 'HR 中心', id, {
+      entity: type,
+      employeeName,
+      movementType,
+      status,
+    });
+    return json({ ok: true, id }, 201);
+  }
+  if (type === 'compensation') {
+    const employeeName = cleanText(b.employeeName, 80),
+      employee = await resolveEmployee(env.DB, employeeName),
+      effectiveDate = validDate(b.effectiveDate, true),
+      salary = Math.round(Number(b.monthlySalary) * 100),
+      social = validDate(b.socialInsuranceStart);
+    if (
+      !employee ||
+      !Number.isFinite(salary) ||
+      salary < 0 ||
+      effectiveDate === false ||
+      social === false
+    )
+      return json(
+        { message: '请先建立员工档案，并填写有效薪资和生效日期' },
+        400,
+      );
+    await env.DB.prepare(
+      'INSERT INTO hr_compensation (id,employee_id,employee_name,monthly_salary_cent,effective_date,bank_name,bank_account,social_insurance_start,benefits_json,status,version,created_by,updated_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)',
+    )
+      .bind(
+        id,
+        employee.id,
+        employeeName,
+        salary,
+        effectiveDate,
+        cleanText(b.bankName, 200),
+        cleanText(b.bankAccount, 80),
+        social,
+        JSON.stringify(pickBody(b, BENEFIT_FIELDS)),
+        cleanText(b.status, 30) || '生效中',
+        user.id,
+        user.id,
+        now,
+        now,
+      )
+      .run();
+    await writeAudit(env.DB, user, 'create', 'HR 中心', id, {
+      entity: type,
+      employeeNo: employee.employeeNo,
+    });
+    return json({ ok: true, id }, 201);
+  }
+  const code = cleanText(b.departmentCode, 50),
+    name = cleanText(b.departmentName, 100),
+    level = Number(b.level),
+    parentId = cleanText(b.parentId, 80) || null;
+  if (!code || !name || ![1, 2, 3].includes(level))
+    return json({ message: '请填写部门编码、名称和有效层级' }, 400);
+  if (parentId) {
+    const parent = await env.DB.prepare(
+      'SELECT level FROM hr_departments WHERE id=? AND deleted_at IS NULL',
+    )
+      .bind(parentId)
+      .first();
+    if (!parent || Number(parent.level) >= level)
+      return json({ message: '上级组织层级必须低于当前组织' }, 400);
+  }
+  await env.DB.prepare(
+    'INSERT INTO hr_departments (id,department_code,department_name,level,parent_id,manager_name,workplace,status,version,created_by,updated_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,1,?,?,?,?)',
+  )
+    .bind(
+      id,
+      code,
+      name,
+      level,
+      parentId,
+      cleanText(b.managerName, 80),
+      cleanText(b.workplace, 80),
+      cleanText(b.status, 20) || '启用',
+      user.id,
+      user.id,
+      now,
+      now,
+    )
+    .run();
+  await writeAudit(env.DB, user, 'create', 'HR 中心', id, {
+    entity: type,
+    code,
+    name,
+  });
+  return json({ ok: true, id }, 201);
+}
+async function currentHr(type, env, id) {
+  const table = {
+    employees: 'hr_employees',
+    movements: 'hr_movements',
+    compensation: 'hr_compensation',
+    departments: 'hr_departments',
+  }[type];
+  return env.DB.prepare(
+    'SELECT * FROM ' + table + ' WHERE id=? AND deleted_at IS NULL',
+  )
+    .bind(id)
+    .first();
+}
+async function updateHr(type, id, request, env, user) {
+  let b;
+  try {
+    b = await request.json();
+  } catch {
+    return json({ message: '请求格式无效' }, 400);
+  }
+  const cur = await currentHr(type, env, id);
+  if (!cur) return json({ message: '记录不存在' }, 404);
+  if (Number(b.version) !== Number(cur.version))
+    return json({ message: '记录已被其他用户修改，请刷新后重试' }, 409);
+  const now = new Date().toISOString();
+  let stmt;
+  let movementApply = null;
+  if (type === 'employees') {
+    const fullName = cleanText(b.fullName, 80),
+      email = cleanText(b.corporateEmail, 160).toLowerCase(),
+      hireDate = validDate(b.hireDate),
+      leaveDate = validDate(b.leaveDate);
+    if (
+      !fullName ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      hireDate === false ||
+      leaveDate === false
+    )
+      return json({ message: '请填写姓名、有效企业邮箱及正确日期' }, 400);
+    stmt = env.DB.prepare(
+      'UPDATE hr_employees SET full_name=?,corporate_email=?,dingtalk_user_id=?,redmine_login=?,employee_type=?,employment_status=?,mobile=?,department_path=?,job_title=?,manager_name=?,workplace=?,hire_date=?,leave_date=?,profile_json=?,version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=? AND deleted_at IS NULL',
+    ).bind(
+      fullName,
+      email,
+      cleanText(b.dingtalkUserId, 160) || null,
+      cleanText(b.redmineLogin, 120) || null,
+      cleanText(b.employeeType, 30) || '全职',
+      cleanText(b.employmentStatus, 30) || '在职',
+      cleanText(b.mobile, 40) || null,
+      cleanText(b.departmentPath, 200),
+      cleanText(b.jobTitle, 100),
+      cleanText(b.managerName, 80),
+      cleanText(b.workplace, 80),
+      hireDate,
+      leaveDate,
+      JSON.stringify(pickBody(b, EMPLOYEE_PROFILE_FIELDS)),
+      user.id,
+      now,
+      id,
+      cur.version,
+    );
+  } else if (type === 'movements') {
+    const employeeName = cleanText(b.employeeName, 80),
+      movementType = cleanText(b.movementType, 30),
+      effectiveDate = validDate(b.effectiveDate, true),
+      status = cleanText(b.status, 30),
+      employee = await resolveEmployee(env.DB, employeeName),
+      parts = splitMovement(b);
+    if (!employeeName || !movementType || effectiveDate === false)
+      return json({ message: '异动信息不完整' }, 400);
+    stmt = env.DB.prepare(
+      'UPDATE hr_movements SET employee_id=?,employee_name=?,movement_type=?,effective_date=?,status=?,handler=?,reason=?,before_json=?,after_json=?,version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=? AND deleted_at IS NULL',
+    ).bind(
+      employee?.id || null,
+      employeeName,
+      movementType,
+      effectiveDate,
+      status,
+      cleanText(b.handler, 80),
+      cleanText(b.reason, 1000),
+      JSON.stringify(parts.before),
+      JSON.stringify(parts.after),
+      user.id,
+      now,
+      id,
+      cur.version,
+    );
+    movementApply = {
+      employeeId: employee?.id,
+      movementType,
+      effectiveDate,
+      status,
+      after: parts.after,
+      user,
+      now,
+    };
+  } else if (type === 'compensation') {
+    const employeeName = cleanText(b.employeeName, 80),
+      employee = await resolveEmployee(env.DB, employeeName),
+      effectiveDate = validDate(b.effectiveDate, true),
+      salary = Math.round(Number(b.monthlySalary) * 100),
+      social = validDate(b.socialInsuranceStart);
+    if (
+      !employee ||
+      !Number.isFinite(salary) ||
+      salary < 0 ||
+      effectiveDate === false ||
+      social === false
+    )
+      return json({ message: '薪酬信息无效或员工档案不存在' }, 400);
+    stmt = env.DB.prepare(
+      'UPDATE hr_compensation SET employee_id=?,employee_name=?,monthly_salary_cent=?,effective_date=?,bank_name=?,bank_account=?,social_insurance_start=?,benefits_json=?,status=?,version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=? AND deleted_at IS NULL',
+    ).bind(
+      employee.id,
+      employeeName,
+      salary,
+      effectiveDate,
+      cleanText(b.bankName, 200),
+      cleanText(b.bankAccount, 80),
+      social,
+      JSON.stringify(pickBody(b, BENEFIT_FIELDS)),
+      cleanText(b.status, 30) || '生效中',
+      user.id,
+      now,
+      id,
+      cur.version,
+    );
+  } else {
+    const code = cleanText(b.departmentCode, 50),
+      name = cleanText(b.departmentName, 100),
+      level = Number(b.level),
+      parentId = cleanText(b.parentId, 80) || null;
+    if (!code || !name || ![1, 2, 3].includes(level) || parentId === id)
+      return json({ message: '组织信息无效' }, 400);
+    stmt = env.DB.prepare(
+      'UPDATE hr_departments SET department_code=?,department_name=?,level=?,parent_id=?,manager_name=?,workplace=?,status=?,version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=? AND deleted_at IS NULL',
+    ).bind(
+      code,
+      name,
+      level,
+      parentId,
+      cleanText(b.managerName, 80),
+      cleanText(b.workplace, 80),
+      cleanText(b.status, 20) || '启用',
+      user.id,
+      now,
+      id,
+      cur.version,
+    );
+  }
+  const result = await stmt.run();
+  if (!result.meta?.changes)
+    return json({ message: '记录已变化，请刷新后重试' }, 409);
+  if (movementApply) await applyEffectiveMovement(env.DB, movementApply);
+  await writeAudit(env.DB, user, 'update', 'HR 中心', id, {
+    entity: type,
+    fromVersion: cur.version,
+    toVersion: Number(cur.version) + 1,
+  });
+  return json({ ok: true, version: Number(cur.version) + 1 });
+}
+async function deleteHr(type, id, request, env, user) {
+  let b = {};
+  try {
+    b = await request.json();
+  } catch {}
+  const cur = await currentHr(type, env, id);
+  if (!cur) return json({ message: '记录不存在' }, 404);
+  if (Number(b.version) !== Number(cur.version))
+    return json({ message: '记录已被其他用户修改，请刷新后重试' }, 409);
+  if (type === 'departments') {
+    const child = await env.DB.prepare(
+      'SELECT COUNT(*) AS total FROM hr_departments WHERE parent_id=? AND deleted_at IS NULL',
+    )
+      .bind(id)
+      .first();
+    if (Number(child?.total || 0) > 0)
+      return json({ message: '请先调整或删除下级组织' }, 409);
+  }
+  const now = new Date().toISOString(),
+    table = {
+      employees: 'hr_employees',
+      movements: 'hr_movements',
+      compensation: 'hr_compensation',
+      departments: 'hr_departments',
+    }[type],
+    r = await env.DB.prepare(
+      'UPDATE ' +
+        table +
+        ' SET deleted_at=?,version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=? AND deleted_at IS NULL',
+    )
+      .bind(now, user.id, now, id, cur.version)
+      .run();
+  if (!r.meta?.changes)
+    return json({ message: '记录已变化，请刷新后重试' }, 409);
+  await writeAudit(env.DB, user, 'delete', 'HR 中心', id, { entity: type });
+  return json({ ok: true });
+}
+async function hrBusinessRoute(request, url, env) {
+  const user = requestUser(request);
+  if (!user) return json({ message: '请先登录后使用人事数据' }, 401);
+  if (!env?.DB) return json({ message: '数据库连接不可用' }, 503);
+  await ensureCore(env.DB);
+  await ensureHrTables(env.DB);
+  const m = url.pathname.match(
+    /^\/api\/hr\/(employees|movements|compensation|departments)(?:\/([^/]+))?$/,
+  );
+  if (!m) return json({ message: '不支持的操作' }, 404);
+  const type = m[1],
+    id = m[2];
+  try {
+    if (!id && request.method === 'GET') return listHr(type, env);
+    if (!id && request.method === 'POST')
+      return createHr(type, request, env, user);
+    if (id && request.method === 'PATCH')
+      return updateHr(type, id, request, env, user);
+    if (id && request.method === 'DELETE')
+      return deleteHr(type, id, request, env, user);
+    return json({ message: '不支持的操作' }, 405);
+  } catch (e) {
+    const message = String(e?.message || e);
+    if (message.includes('UNIQUE constraint failed'))
+      return json(
+        {
+          message:
+            type === 'employees'
+              ? '工号、企业邮箱或钉钉 UserID 已存在'
+              : type === 'compensation'
+                ? '该员工已存在薪酬档案'
+                : type === 'departments'
+                  ? '部门编码已存在'
+                  : '记录重复',
+        },
+        409,
+      );
+    return json({ message: '数据保存失败，请检查字段后重试' }, 500);
+  }
+}
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname.startsWith('/api/records'))
+      return recordsRoute(request, url, env);
+    if (
+      /^\/api\/hr\/(employees|movements|compensation|departments)(?:\/|$)/.test(
+        url.pathname,
+      )
+    )
+      return hrBusinessRoute(request, url, env);
+    if (url.pathname === '/api/integrations/status')
+      return json({
+        dingtalk: Boolean(env?.DINGTALK_APP_KEY && env?.DINGTALK_APP_SECRET),
+        redmine: Boolean(env?.REDMINE_BASE_URL && env?.REDMINE_API_KEY),
+        secretsExposed: false,
+      });
+    if (
+      url.pathname === '/api/integrations/test' &&
+      request.method === 'POST'
+    ) {
+      if (!requestUser(request)) return json({ message: '请先登录' }, 401);
+      return testIntegration(url.searchParams.get('system'), env);
+    }
+    if (url.pathname === '/api/hr/field-mappings' && request.method === 'GET')
+      return json({ mappings: await getMappings(env) });
+    if (url.pathname === '/api/hr/field-mappings' && request.method === 'PUT') {
+      if (!requestUser(request)) return json({ message: '请先登录' }, 401);
+      return saveMappings(request, env);
+    }
+    if (url.pathname === '/hr-ui.js')
+      return new Response(HR_UI_SCRIPT, {
+        headers: {
+          'content-type': 'application/javascript; charset=utf-8',
+          'cache-control': 'public, max-age=120',
+        },
+      });
+    if (url.pathname === '/' || url.pathname === '/index.html')
+      return new Response(html, {
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'public, max-age=120',
+        },
+      });
+    if (url.pathname === '/favicon.ico')
+      return new Response(null, { status: 204 });
+    return new Response('Not found', { status: 404 });
+  },
+};
